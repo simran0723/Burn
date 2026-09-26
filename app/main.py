@@ -6,8 +6,14 @@ from app.schemas.substription import SubscriptionCreate,SubscriptionUpdate
 from app.database import Base, engine
 from app.models.subscription import Subscription
 from datetime import date,timedelta
+from dotenv import load_dotenv
+import os
 
 app = FastAPI()
+
+load_dotenv()
+
+print(os.getenv("EMAIL_ADDRESS"))
 
 Base.metadata.create_all(bind=engine)
 @app.get("/")
@@ -28,6 +34,7 @@ def create_subscription(subscription : SubscriptionCreate ,db : Session = Depend
     db = SessionLocal()
     new_subscription = Subscription(
         name = subscription.name,
+        email = subscription.email,
         price = subscription.price,
         billing_cycle = subscription.billing_cycle,
         renewal_date  = subscription.renewal_date
@@ -72,6 +79,19 @@ def get_yearly_cost(db :Session= Depends(get_db)):
     return {
         "yearly_cost": yearly_cost
     }
+
+@app.get("/subscriptions/filter")
+def filter_subscriptions(billing_cycle :str , db : Session = Depends(get_db)):
+    subscriptions = db.query(Subscription).filter(Subscription.billing_cycle == billing_cycle).all()
+    return subscriptions
+
+@app.get("/subscriptions/renewal_alert")
+def get_renewal_alert(db :Session = Depends(get_db)):
+    today = date.today()
+    alert_date = today+ timedelta(days=3)
+    subscriptions = db.query(Subscription).filter(Subscription.renewal_date >= today ,Subscription.renewal_date <= alert_date).all()
+
+    return subscriptions
 
 
 

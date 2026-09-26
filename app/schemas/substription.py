@@ -3,12 +3,14 @@ from datetime import date
 
 class SubscriptionCreate(BaseModel):
     name : str
+    email : str
     price : float
     billing_cycle : str
     renewal_date  : date
 
 class SubscriptionUpdate(BaseModel):
     name : str
+    email :str
     price : float
     billing_cycle : str
     renewal_date : date
