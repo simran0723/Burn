@@ -1,3 +1,5 @@
+from sched import scheduler
+
 from fastapi import FastAPI,Depends,HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
@@ -8,8 +10,14 @@ from app.models.subscription import Subscription
 from datetime import date,timedelta
 from dotenv import load_dotenv
 import os
+from app.email_service import send_email
+from apscheduler.schedulers.background import BackgroundScheduler
 
+
+job_schedular  = BackgroundScheduler()
 app = FastAPI()
+
+
 
 load_dotenv()
 
@@ -58,6 +66,17 @@ def get_subscription():
 
     db.close()
     return subscriptions
+@app.get("/test-email")
+def test_email():
+    send_email(
+        "01simransoni@gmail.com",
+        "Burn Test Email",
+        "This is the test Email from burn "
+    )
+    return{"message":"Email sent successfully"}
+
+
+
 
 @app.get("/subscriptions/upcoming")
 def get_upcoming_subscription(db : Session=Depends(get_db)):
@@ -85,12 +104,56 @@ def filter_subscriptions(billing_cycle :str , db : Session = Depends(get_db)):
     subscriptions = db.query(Subscription).filter(Subscription.billing_cycle == billing_cycle).all()
     return subscriptions
 
+def check_renewals():
+    db = SessionLocal()
+
+    try:
+        today = date.today()
+        alert_date = today + timedelta(days=3)
+
+        subscriptions = db.query(Subscription).filter(
+            Subscription.renewal_date >= today,
+            Subscription.renewal_date <= alert_date
+        ).all()
+
+        for subscription in subscriptions:
+            if not subscription.notification_sent:
+                send_email(
+                    subscription.email,
+                    "Burn - Subscription Renewal Alert",
+                    f"Your {subscription.name} subscription will renew on {subscription.renewal_date}. "
+                    f"Amount: ₹{subscription.price}"
+                )
+
+                subscription.notification_sent = True
+
+        db.commit()
+
+    finally:
+        db.close()
+
+
+
+
 @app.get("/subscriptions/renewal_alert")
+
 def get_renewal_alert(db :Session = Depends(get_db)):
     today = date.today()
     alert_date = today+ timedelta(days=3)
     subscriptions = db.query(Subscription).filter(Subscription.renewal_date >= today ,Subscription.renewal_date <= alert_date).all()
 
+
+    for subscription in subscriptions:
+        if not subscription.notification_sent:
+            send_email(
+            subscription.email,
+            "Burn - Subscription Renewal Alert",
+            f"Your {subscription.name} subscription will renew on {subscription.renewal_date}. "
+            f"Amount: ₹{subscription.price}"
+            )
+
+            subscription.notification_sent = True
+    db.commit()
     return subscriptions
 
 
@@ -160,4 +223,5 @@ def delete_subscription(subscription_id : int , db:Session = Depends(get_db)):
         "message" : "Subscription deleted Successfully"
     }
 
-
+job_schedular.add_job(check_renewals, "interval", seconds=30)
+job_schedular.start()

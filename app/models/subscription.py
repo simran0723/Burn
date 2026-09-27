@@ -1,4 +1,4 @@
-from sqlalchemy import Column ,String,Integer,Float,Date
+from sqlalchemy import Column ,String,Integer,Float,Date,Boolean
 
 from app.database import Base
 
@@ -10,4 +10,4 @@ class Subscription(Base):
     price = Column(Float,nullable=False)
     billing_cycle = Column(String,nullable=False)
     renewal_date  = Column(Date,nullable=False)
-    
+    notification_sent = Column(Boolean, default= False )
