@@ -1,29 +1,31 @@
 from sched import scheduler
-
 from fastapi import FastAPI,Depends,HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from app.database import SessionLocal
 from app.schemas.substription import SubscriptionCreate,SubscriptionUpdate
+from app.schemas.user import UserCreate
 from app.database import Base, engine
 from app.models.subscription import Subscription
+from app.models.user import User
 from datetime import date,timedelta
 from dotenv import load_dotenv
 import os
 from app.email_service import send_email
 from apscheduler.schedulers.background import BackgroundScheduler
+import bcrypt
 
+
+
+app = FastAPI()
+Base.metadata.create_all(bind=engine)
 
 job_schedular  = BackgroundScheduler()
-app = FastAPI()
-
-
-
 load_dotenv()
 
 print(os.getenv("EMAIL_ADDRESS"))
 
-Base.metadata.create_all(bind=engine)
+
 @app.get("/")
 def home ():
     return{
@@ -36,6 +38,23 @@ def get_db():
         yield db
     finally:
         db.close()
+
+@app.post("/register")
+def  register_user(user:UserCreate , db:Session = Depends(get_db)):
+    hashed_password = bcrypt.hashpw(user.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    existing_user = db.query(User).filter(User.email == user.email).first()
+
+    if existing_user:
+      raise HTTPException(
+        status_code=400,
+        detail="Email already registered"
+    )
+    new_user = User(name = user.name,email = user.email , password = hashed_password)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
 
 @app.post("/subscriptions")
 def create_subscription(subscription : SubscriptionCreate ,db : Session = Depends(get_db)):
@@ -223,5 +242,5 @@ def delete_subscription(subscription_id : int , db:Session = Depends(get_db)):
         "message" : "Subscription deleted Successfully"
     }
 
-job_schedular.add_job(check_renewals, "interval", seconds=30)
+job_schedular.add_job(check_renewals, "interval", days=1)
 job_schedular.start()
