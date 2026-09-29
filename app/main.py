@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from app.database import SessionLocal
 from app.schemas.substription import SubscriptionCreate,SubscriptionUpdate
-from app.schemas.user import UserCreate
+from app.schemas.user import UserCreate , UserLogin
 from app.database import Base, engine
 from app.models.subscription import Subscription
 from app.models.user import User
@@ -14,6 +14,7 @@ import os
 from app.email_service import send_email
 from apscheduler.schedulers.background import BackgroundScheduler
 import bcrypt
+from app.auth import create_access_token
 
 
 
@@ -21,6 +22,7 @@ app = FastAPI()
 Base.metadata.create_all(bind=engine)
 
 job_schedular  = BackgroundScheduler()
+
 load_dotenv()
 
 print(os.getenv("EMAIL_ADDRESS"))
@@ -54,6 +56,25 @@ def  register_user(user:UserCreate , db:Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
     return new_user
+
+
+@app.post("/login")
+def user_login (user : UserLogin , db:Session = Depends(get_db)):
+    existing_user = db.query(User).filter(User.email == user.email).first()
+
+    if existing_user is None :
+        raise HTTPException (status_code= 401 , detail="Invalid user or password")
+    if not bcrypt.checkpw(user.password.encode("utf-8"),existing_user.password.encode("utf-8")):
+        raise HTTPException(status_code=401,detail="Invalid user email and password")
+   
+    access_token = create_access_token({
+    "user_id": existing_user.id})
+
+    return {
+    "access_token": access_token,
+    "token_type": "bearer"
+}
+    
 
 
 @app.post("/subscriptions")
