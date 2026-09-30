@@ -14,11 +14,13 @@ import os
 from app.email_service import send_email
 from apscheduler.schedulers.background import BackgroundScheduler
 import bcrypt
-from app.auth import create_access_token
+from app.auth import create_access_token,verify_access_token
+from fastapi.security import HTTPAuthorizationCredentials,HTTPBearer
 
 
 
 app = FastAPI()
+security = HTTPBearer()
 Base.metadata.create_all(bind=engine)
 
 job_schedular  = BackgroundScheduler()
@@ -26,6 +28,16 @@ job_schedular  = BackgroundScheduler()
 load_dotenv()
 
 print(os.getenv("EMAIL_ADDRESS"))
+
+
+def get_current_user(credentials :HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+
+    user_id = verify_access_token(token)
+    if user_id is None :
+        raise HTTPException(status_code=401 , detail="Invalid or expired token")
+    return user_id
+
 
 
 @app.get("/")
@@ -78,14 +90,15 @@ def user_login (user : UserLogin , db:Session = Depends(get_db)):
 
 
 @app.post("/subscriptions")
-def create_subscription(subscription : SubscriptionCreate ,db : Session = Depends(get_db)):
-    db = SessionLocal()
+def create_subscription(subscription : SubscriptionCreate ,db : Session = Depends(get_db),current_user :int= Depends(get_current_user)):
+   
     new_subscription = Subscription(
         name = subscription.name,
         email = subscription.email,
         price = subscription.price,
         billing_cycle = subscription.billing_cycle,
-        renewal_date  = subscription.renewal_date
+        renewal_date  = subscription.renewal_date,
+        user_id = current_user
 
     )
     try: 
@@ -99,12 +112,10 @@ def create_subscription(subscription : SubscriptionCreate ,db : Session = Depend
     return new_subscription
 
 @app.get("/subscriptions")
-def get_subscription():
-    db = SessionLocal()
-
-    subscriptions = db.query(Subscription).all()
-
-    db.close()
+def get_subscriptions(
+    db: Session = Depends(get_db),
+    current_user: int = Depends(get_current_user)):
+    subscriptions = db.query(Subscription).filter(Subscription.user_id == current_user).all()
     return subscriptions
 @app.get("/test-email")
 def test_email():
@@ -177,10 +188,11 @@ def check_renewals():
 
 @app.get("/subscriptions/renewal_alert")
 
-def get_renewal_alert(db :Session = Depends(get_db)):
+def get_renewal_alert(db :Session = Depends(get_db) , current_user:int = Depends(get_current_user)):
     today = date.today()
     alert_date = today+ timedelta(days=3)
-    subscriptions = db.query(Subscription).filter(Subscription.renewal_date >= today ,Subscription.renewal_date <= alert_date).all()
+    subscriptions = db.query(Subscription).filter(Subscription.renewal_date >= today ,Subscription.renewal_date <= alert_date
+    ,Subscription.user_id == current_user).all()
 
 
     for subscription in subscriptions:
@@ -200,9 +212,9 @@ def get_renewal_alert(db :Session = Depends(get_db)):
 
 
 @app.get("/subscriptions/monthly-cost")
-def get_monthly_cost(db: Session = Depends(get_db)):
+def get_monthly_cost(db: Session = Depends(get_db),current_user :int = Depends(get_current_user)):
 
-    subscriptions = db.query(Subscription).all()
+    subscriptions = db.query(Subscription).filter(Subscription.user_id == current_user).all()
 
     monthly_cost = 0
 
@@ -215,17 +227,23 @@ def get_monthly_cost(db: Session = Depends(get_db)):
     return {"monthly_cost": monthly_cost}
 
 @app.get("/subscriptions/{subscription_id}")
-def get_subscription(subscription_id : int):
-    db= SessionLocal()
+def get_subscription(subscription_id : int,db:Session = Depends(get_db) , current_user : int = Depends(get_current_user)):
+  
 
-    subscription = db.query(Subscription).filter(Subscription.id == subscription_id).first()
+    subscription = db.query(Subscription).filter(Subscription.id == subscription_id,Subscription.user_id == current_user).first()
 
-    db.close()
+    if subscription is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Subscription not found"
+        )
+
     return subscription
 
 @app.put("/subscriptions/{subscription_id}")
-def update_subscription(subscription_id : int , subscription : SubscriptionUpdate , db:Session = Depends(get_db)):
-    existing_subscription = db.query(Subscription).filter(Subscription.id == subscription_id).first()
+def update_subscription(subscription_id : int , subscription : SubscriptionUpdate , db:Session = Depends(get_db)
+    ,current_user:int = Depends(get_current_user)):
+    existing_subscription = db.query(Subscription).filter(Subscription.id == subscription_id , Subscription.user_id == current_user).first()
     if existing_subscription is None:
         raise HTTPException (status_code=404,detail="subscription not found")
     existing_subscription.name = subscription.name
@@ -247,8 +265,8 @@ def update_subscription(subscription_id : int , subscription : SubscriptionUpdat
 
 
 @app.delete("/subscriptions/{subscription_id}")
-def delete_subscription(subscription_id : int , db:Session = Depends(get_db)):
-    existing_subscription = db.query(Subscription).filter(Subscription.id == subscription_id).first()
+def delete_subscription(subscription_id : int , db:Session = Depends(get_db),current_user :int = Depends(get_current_user)):
+    existing_subscription = db.query(Subscription).filter(Subscription.id == subscription_id,Subscription.user_id == current_user).first()
     if existing_subscription is None:
             raise HTTPException (status_code=404,detail="subscription not found")
 

@@ -15,3 +15,13 @@ def create_access_token(data : dict):
     token = jwt.encode(to_encode,SECRET_KEY,algorithm=ALGORITHM)
 
     return token
+
+def verify_access_token (token:str):
+    try:
+        payload = jwt.decode(token ,SECRET_KEY, algorithms= ALGORITHM)
+        user_id = payload.get("user_id")
+        if user_id is None:
+            return None
+        return user_id
+    except:
+        return None
