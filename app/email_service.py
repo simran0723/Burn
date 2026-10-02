@@ -3,6 +3,7 @@ import os
 from email.message import EmailMessage
 
 def send_email(to_email , subject , body ):
+   
     email = EmailMessage()
     email["From"] = os.getenv("EMAIL_ADDRESS")
     email["to"] = to_email
@@ -15,3 +16,4 @@ def send_email(to_email , subject , body ):
             os.getenv("EMAIL_PASSWORD")
         )
         smtp.send_message(email)
+    

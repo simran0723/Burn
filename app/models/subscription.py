@@ -13,3 +13,4 @@ class Subscription(Base):
     renewal_date  = Column(Date,nullable=False)
     notification_sent = Column(Boolean, default= False )
     user_id = Column(Integer , ForeignKey("users.id"),nullable=False)
+    
