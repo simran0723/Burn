@@ -91,7 +91,7 @@ def check_renewals():
 
     try:
         today = date.today()
-        alert_date = today + timedelta(days=3)
+        alert_date = today + timedelta(days=7)
 
         subscriptions = db.query(Subscription).filter(
             Subscription.renewal_date >= today,
@@ -100,11 +100,42 @@ def check_renewals():
 
         for subscription in subscriptions:
             if not subscription.notification_sent:
+
+                email_body = f"""
+                <html>
+                    <body>
+                        <h2>🔔 Burn - Subscription Renewal Reminder</h2>
+
+                        <p>Hi,</p>
+
+                        <p>
+                            Your <strong>{subscription.name}</strong>
+                            subscription is renewing soon.
+                        </p>
+
+                        <h3>Subscription Details</h3>
+
+                        <p><strong>Subscription:</strong> {subscription.name}</p>
+                        <p><strong>Amount:</strong> ₹{subscription.price}</p>
+                        <p><strong>Renewal Date:</strong> {subscription.renewal_date}</p>
+
+                        <p>
+                            Please make sure your payment method is ready
+                            for the upcoming renewal.
+                        </p>
+
+                        <p>
+                            — <strong>Burn</strong><br>
+                            <i>Track your subscriptions. Know your burn.</i>
+                        </p>
+                    </body>
+                </html>
+                """
+
                 send_email(
                     subscription.email,
-                    "Burn - Subscription Renewal Alert",
-                    f"Your {subscription.name} subscription will renew on {subscription.renewal_date}. "
-                    f"Amount: ₹{subscription.price}"
+                    "🔔 Burn - Subscription Renewal Reminder",
+                    email_body
                 )
 
                 subscription.notification_sent = True
